@@ -2,38 +2,38 @@ import tkinter as tk
 import time
 from random import randrange
 
-#window/game properties
+#window dimensions
 WWIDTH = 600
 WHEIGHT = 400
+
+#game properties
 GHEIGHT = WHEIGHT - (WHEIGHT/5) #game frame gets 4/5, rest for controls
+FPS = 60 #how many times per second the game loops
 SPEEDINT = 250 #the loop number interval that will increase speed
 STARTLIVES = 3
-FPS = 60 #how many times per second the game loops
 LANES = 4
 LHEIGHT = GHEIGHT / LANES #lanes are equal height portions of game frame
 
-#player properties
-CWIDTH = 40 #square so just need width
-CBUFFER = CWIDTH #buffer is equal to width
-CGROUND = GHEIGHT - CWIDTH #the floor of the player Y
-LSTART = 1 #the starting lane for player
-
-#object (pickups/obstacles) properties
-OWIDTH = 30 #square so just need width
-OBUFFER = 30
-OGROUND = GHEIGHT - OWIDTH
-PICKUPVAL = 1000
+#player/object properties
+CSIDE = 40 #square so just need one side
+OSIDE = 30
+PICKUPVAL = 1000 #amount of score added with each pickup
 NUMENTS = 4 #number of non-player entities in the game
 
-#Game object that manages general game properties
-#addScore(x) and addSpeed(x) methods to modify these game properties
+#Game object that manages general game properties including main window
+##addScore(x), addSpeed(x), addLives(x) methods modify the game properties
+##createRect(...), moveRect(...) are support methods for managing Entitys' rect
+##suspend(), resume() control whether the game loop is running or not
+##start() begins a game, close() stops the game loop then closes the window
+##flash("x") sets Game background colour (used for visual feedback)
+##loop() handles any changes needed to Game each time the game loops
 class Game:
-    def __init__(self, score, speed, lives):
-        self.score = score
-        self.speed = speed
+    def __init__(self, lives):
         self.lives = lives
+        self.score = 1
+        self.speed = 1
         self.loopNo = 0
-        self.playing = True
+        self.running = True
         self.quit = False
 
         #setup a window with given dimensions that cannot be resized
@@ -44,7 +44,7 @@ class Game:
         self.window.resizable(0, 0)
         self.window.protocol("WM_DELETE_WINDOW", self.close)
 
-        #game gets 4/5 of screen, 1/5 reserved for controls
+        #game gets 4/5 of screen vertically, 1/5 reserved for controls
         self.gameCanv = tk.Canvas(self.window, width=WWIDTH, height=GHEIGHT)
         self.controls = tk.Frame(self.window, width=WWIDTH, height=WHEIGHT/5,
                                  background="grey")
@@ -60,7 +60,7 @@ class Game:
                                  font=("Arial", 14), width=int(WWIDTH/36))
         self.scoreLbl.grid(row=0, column=0)
 
-        #the lives left label
+        #the lives remaining label
         self.livesStr = tk.StringVar()
         self.livesLbl = tk.Label(self.controls, textvariable=self.livesStr,
                                  font=("Arial", 14), width=int(WWIDTH/36))
@@ -69,26 +69,13 @@ class Game:
     def addScore(self, incr):
         self.score += incr
 
-    def addSpeed(self):
-        self.speed += 1
+    def addSpeed(self, incr):
+        self.speed += incr
 
     def addLives(self, incr):
         self.lives += incr
 
-    def loop(self):
-        if self.playing:
-            self.loopNo += 1
-            self.addScore(1)
-      
-        self.window.update()
-        self.scoreStr.set("Score: %s" % game.score)
-        self.livesStr.set("Lives remaining: %s" % game.lives)
-        self.flash("white")
-
-    def flash(self, colour):
-        self.gameCanv.config(background=colour)
-
-    def addRect(self, X, Y, width, height, fill):
+    def createRect(self, X, Y, width, height, fill):
         rect = self.gameCanv.create_rectangle(X, Y, X+width, Y+height,
                                               fill=fill)
         return rect
@@ -97,21 +84,33 @@ class Game:
         self.gameCanv.move(rect, incrX, incrY)
         self.gameCanv.update()
 
-    def resume(self):
-        self.playing = True
+    def suspend(self):
+        self.running = False
 
-    def end(self):
-        self.playing = False
+    def resume(self):
+        self.running = True
 
     def start(self):
         self.score = 0
         self.speed = 1
         self.lives = STARTLIVES
         self.loopNo = 0
-        self.playing = True
+        self.running = True
 
     def close(self):
         self.quit = True
+
+    def flash(self, colour):
+        self.gameCanv.config(background=colour)
+
+    def loop(self):
+        if self.running:
+            self.loopNo += 1
+            self.addScore(1)
+        self.window.update()
+        self.scoreStr.set("Score: %s" % game.score)
+        self.livesStr.set("Lives remaining: %s" % game.lives)
+        self.flash("white")
 
 #Entity objects for any game entities (player, enemies, pickups)
 #addY(x) and addX(x) methods to modify the entity's dimensions
@@ -130,7 +129,7 @@ class Entity:
             rectColour = "red"
 
         #initialise the entity rect with given dimensions
-        rect = game.addRect(X, Y, width, height, rectColour)
+        rect = game.createRect(X, Y, width, height, rectColour)
 
         self.rect = rect
         self.category = category
@@ -183,16 +182,16 @@ class Entity:
 def startGame():
     #game loop
     while True:
-        if game.playing: #check that the game is not over/paused
+        if game.running: #check that the game is not over/paused
             #handle game speed increases    
             if game.loopNo % SPEEDINT == 0:
-                game.addSpeed()
+                game.addSpeed(1)
 
             #handle non-player Entity movement
             for ent in entities:
                 ent.addX(-game.speed)
 
-                if ent.X <= 0 - OWIDTH:
+                if ent.X <= 0 - OSIDE:
                     ent.reset()
 
                 if player.collidesWith(ent):
@@ -206,7 +205,7 @@ def startGame():
                     
             if game.lives <= 0: #if there are no lives remaining, game over
                 game.livesStr.set("Game Over")
-                game.end()
+                game.suspend()
                 break
 
         if game.quit: #if the game has been quit through closing window
@@ -219,11 +218,11 @@ def startGame():
     print("game loop terminated")
 
 #initialise Game object
-game = Game(1, 1, STARTLIVES)
+game = Game(STARTLIVES)
 
 #initialise Entity objects
-pY = (40 + ((LANES - 1 - LSTART) * 80)) - (CWIDTH / 2)
-player = Entity(0, game, CWIDTH, CWIDTH, CBUFFER, pY, LSTART)
+pY = (40 + ((LANES - 1 - 1) * 80)) - (CSIDE / 2)
+player = Entity(0, game, CSIDE, CSIDE, CSIDE, pY, 1)
 
 entities = []
 
@@ -231,9 +230,9 @@ for i in range(NUMENTS):
     c = randrange(2) + 1 #category; if 1 then pickup if 2 then obstacle
     l = randrange(LANES) #lane number
     x = 250 + (i * 150)
-    y = (40 + ((LANES - 1 - l) * 80)) - (OWIDTH / 2)
+    y = (40 + ((LANES - 1 - l) * 80)) - (OSIDE / 2)
     
-    ent = Entity(c, game, OWIDTH, OWIDTH, x, y, l)
+    ent = Entity(c, game, OSIDE, OSIDE, x, y, l)
     entities.append(ent)
 
 #buttons to move player up/down a row
@@ -250,7 +249,7 @@ reset = tk.Button(game.controls, text="Reset", font=("Arial", 12),
 reset.grid(row=0, column=4)
 
 def reset():
-    game.end()
+    game.suspend()
     game.start()
 
     for ent in entities:
@@ -268,7 +267,7 @@ resumeBtn.grid(row=1, column=4)
 resumeBtn.grid_remove()
 
 def pause():
-    game.end()
+    game.suspend()
     pauseBtn.grid_remove()
     resumeBtn.grid()
 
