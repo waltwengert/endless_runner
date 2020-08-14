@@ -21,6 +21,8 @@ PICKUPVAL = 1000 #amount of score added with each pickup
 NUMENTS = 4 #number of non-player entities in the game
 
 #Game object that manages general game properties including main window
+#When initialised set properties, create window with game and control frames
+#and create UI elements for these
 ##addScore(x), addSpeed(x), addLives(x) methods modify the game properties
 ##createRect(...), moveRect(...) are support methods for managing Entitys' rect
 ##suspend(), resume() control whether the game loop is running or not
@@ -98,6 +100,8 @@ class Game:
         self.running = True
 
     def close(self):
+        #TODO make this work properly by preventing multiple game loops starting
+        #after pushing pause 
         self.quit = True
 
     def flash(self, colour):
@@ -112,33 +116,28 @@ class Game:
         self.livesStr.set("Lives remaining: %s" % game.lives)
         self.flash("white")
 
-#Entity objects for any game entities (player, enemies, pickups)
-#addY(x) and addX(x) methods to modify the entity's dimensions
-#when initialised the Entity object creates its own rectangle on gameCanv
+#Entity objects for any game entities (player, obstacles, pickups)
+#When initialised sets properties and creates a tkinter rectangle using the
+#Game createRect(...) support method
+##addY(x) and addX(x) methods modifies the entity's location on the canvas
+##setColour() sets Entitys' colour based on its category
+##reset() randomly sets Entitys' category and resets its X position off-screen
+##collidesWith(E) returns True if this rect intersects a given Entity
+##changeLane(x) modifies the lane that the Entity is currently in
 class Entity:
-    def __init__(self, category, game, width, height, X, Y, lane):
-        #entities need access to game instance to move rects on canvas
+    def __init__(self, game, category, width, height, X, Y, lane):
+        #entities need access to game instance to move their rects on canvas
         self.game = game
-        
-        rectColour = "black" #default if category set incorrectly
-        if category == 0: #player 
-            rectColour = "green"
-        elif category == 1: #pickup
-            rectColour = "yellow"
-        elif category == 2: #obstacle 
-            rectColour = "red"
-
-        #initialise the entity rect with given dimensions
-        rect = game.createRect(X, Y, width, height, rectColour)
-
-        self.rect = rect
         self.category = category
         self.height = height
         self.width = width
         self.X = X
         self.Y = Y
         self.lane = lane 
-        self.isJump = 0
+
+        #initialise the entity rect with given dimensions
+        self.rect = game.createRect(X, Y, width, height)
+        self.setColour()
 
     def addY(self, incr):
         self.Y += -incr
@@ -148,34 +147,42 @@ class Entity:
         self.X += incr
         game.moveRect(self.rect, incr, 0) #no need to inverse X-axis
 
-    def reset (self):
-        #make entity randomly a pickup or obstacle
-        newC = randrange(3) + 1 #2/3 obstacle (2,3), 1/3 pickup (1)
-        newFill = "yellow" #default pickup
-        
-        if newC > 1: #obstacle
-            newFill = "red"
-            newC = 2 #so that if newC == 3 it's still obstacle
-            
-        game.gameCanv.itemconfig(self.rect, fill=newFill)
-        self.category = newC
-        
-        rOffset = randrange(80) + 20 #min 20, max 100
-        self.addX(WWIDTH + rOffset) #offset ensures reset is off screen
+    def setColour(self):
+        #get the colour as a string based on Entity category
+        if category == 0: #player 
+            rectColour = "green"
+        elif category == 1: #pickup
+            rectColour = "yellow"
+        elif category == 2: #obstacle 
+            rectColour = "red"
+        game.gameCanv.itemconfig(self.rect, fill=rectColour)
 
-        rLane = randrange(4)
-        self.addY((rLane - self.lane) * LHEIGHT)
+    def reset (self):
+        #give Entity a random category
+        newCat = randrange(3) + 1 #2/3 obstacle (2,3), 1/3 pickup (1)
+        if newCat > 1: #obstacle
+            newCat = 2 #so that if newCat != 1 it is an obstacle
+
+        self.category = newCat
+        self.setColour()
+        
+        rOffset = randrange(80) + 20 #random x offset min 20, max 100
+        self.addX(WWIDTH + rOffset) #offset ensures reset is off-screen
+
+        rLane = randrange(LANES) #random lane out of set lanes
+        self.addY((rLane - self.lane) * LHEIGHT) #add rLane lots of LHEIGHT
         self.lane = rLane
 
     def collidesWith(self, entity):
-        if (self.X < entity.X + entity.width and self.X + self.width >
-            entity.X and self.lane == entity.lane):
+        if (self.X < entity.X + entity.width and self.X + self.width > entity.X
+            and self.lane == entity.lane): #if same lane and X intersects
             return True
+        return False
 
-    def move(self, incr):
-        #only if going up and not max lane/going down and not 0
-        if not ((incr > 0 and self.lane == LANES-1) or
-            (incr < 0 and self.lane == 0)):
+    def changeLane(self, incr):
+        #only if going up and not max lane or going down and not 0
+        if not ((incr > 0 and self.lane == LANES-1) or (incr < 0 and
+                                                        self.lane == 0)):
             self.lane += incr
             self.addY(incr*LHEIGHT)
 
@@ -222,7 +229,7 @@ game = Game(STARTLIVES)
 
 #initialise Entity objects
 pY = (40 + ((LANES - 1 - 1) * 80)) - (CSIDE / 2)
-player = Entity(0, game, CSIDE, CSIDE, CSIDE, pY, 1)
+player = Entity(game, 0, CSIDE, CSIDE, CSIDE, pY, 1)
 
 entities = []
 
@@ -232,14 +239,14 @@ for i in range(NUMENTS):
     x = 250 + (i * 150)
     y = (40 + ((LANES - 1 - l) * 80)) - (OSIDE / 2)
     
-    ent = Entity(c, game, OSIDE, OSIDE, x, y, l)
+    ent = Entity(game, c, OSIDE, OSIDE, x, y, l)
     entities.append(ent)
 
 #buttons to move player up/down a row
 up = tk.Button(game.controls, text=" \u2191 ", font=("Arial", 14),
-               command = lambda : player.move(1))
+               command = lambda : player.changeLane(1))
 down = tk.Button(game.controls, text=" \u2193 ", font=("Arial", 14),
-                 command = lambda : player.move(-1))
+                 command = lambda : player.changeLane(-1))
 up.grid(row=0, column=2)
 down.grid(row=1, column=2)
 
