@@ -20,13 +20,14 @@ OSIDE = 30
 PICKUPVAL = 1000 #amount of score added with each pickup
 NUMENTS = 4 #number of non-player entities in the game
 
+
 #Game object that manages general game properties including main window
 #When initialised set properties, create window with game and control frames
 #and create variable UI elements (labels)
-##addScore(x), addSpeed(x), addLives(x) methods modify the game properties
-##createRect(...), moveRect(...) are support methods for managing Entitys' rect
+##addScore(x), addSpeed(x), addLives(x) functions modify the game properties
+##createRect(...), moveRect(...) are support functions for managing Entitys' rect
 ##suspend(), resume() control whether the game loop is running or not
-##start() begins a game, close() stops the game loop then closes the window
+##restart() starts new game, close() stops the game loop then closes the window
 ##flash("x") sets Game background colour (used for visual feedback)
 ##loop() handles any changes needed to Game each time the game loops
 class Game:
@@ -91,16 +92,18 @@ class Game:
     def resume(self):
         self.running = True
 
-    def start(self):
+    def restart(self):
+        game.suspend()
         self.score = 0
         self.speed = 1
         self.lives = STARTLIVES
         self.loopNo = 0
         self.running = True
+        for ent in entities:
+            ent.reset()
+        startGameLoop()        
 
     def close(self):
-        #TODO make this work properly by preventing multiple game loops starting
-        #after pushing pause 
         self.quit = True
 
     def flash(self, colour):
@@ -117,8 +120,8 @@ class Game:
 
 #Entity objects for any game entities (player, obstacles, pickups)
 #When initialised sets properties and creates a tkinter rectangle using the
-#Game createRect(...) support method
-##addY(x) and addX(x) methods modifies the entity's location on the canvas
+#Game createRect(...) support function
+##addY(x) and addX(x) functions modifies the entity's location on the canvas
 ##setColour() sets Entitys' colour based on its category
 ##reset() randomly sets Entitys' category and resets its X position off-screen
 ##collidesWith(E) returns True if this rect intersects a given Entity
@@ -148,6 +151,7 @@ class Entity:
 
     def setColour(self):
         #get the colour as a string based on Entity category
+        rectColour = "black" #default if category out of bounds
         if self.category == 0: #player 
             rectColour = "green"
         elif self.category == 1: #pickup
@@ -185,26 +189,22 @@ class Entity:
             self.lane += incr
             self.addY(incr*LHEIGHT)
 
-def startGame():
-    #game loop
+#function to start the main game loop that handles all game logic and updates
+def startGameLoop():
     while True:
-        if game.running: #check that the game is not over/paused
-            #handle game speed increases    
-            if game.loopNo % SPEEDINT == 0:
+        if game.running: #check that the game is not suspended
+            if game.loopNo % SPEEDINT == 0: #increase speed after set loops
                 game.addSpeed(1)
 
-            #handle non-player Entity movement
-            for ent in entities:
+            for ent in entities: #non-player Entity movement
                 ent.addX(-game.speed)
-
                 if ent.X <= 0 - OSIDE:
                     ent.reset()
-
                 if player.collidesWith(ent):
-                    if ent.category == 1: #pickup, add score
+                    if ent.category == 1: #pickup
                         game.flash("yellow")
                         game.addScore(PICKUPVAL)
-                    elif ent.category == 2: #obstacle, take life
+                    elif ent.category == 2: #obstacle
                         game.flash("red")
                         game.addLives(-1)
                     ent.reset()
@@ -213,16 +213,13 @@ def startGame():
                 game.livesStr.set("Game Over")
                 game.suspend()
                 break
-
         if game.quit: #if the game has been quit through closing window
             game.window.destroy()
             break
-
         #general loop events
         game.loop()            
         time.sleep(1/FPS)
-    
-    print("game loop terminated")
+
 
 #initialise Game object
 game = Game(STARTLIVES)
@@ -241,6 +238,7 @@ for i in range(NUMENTS):
     y = (40 + ((LANES-1-l) * 80)) - (OSIDE/2) #same as player rationale
     ent = Entity(game, c, OSIDE, OSIDE, x, y, l)
     entities.append(ent)
+    print("C: %s\tL:%s" % (c, l))
 
 #up/down buttons with unicode arrows to move player up/down a row
 up = tk.Button(game.controls, text=" \u2191 ", font=("Arial", 14),
@@ -252,7 +250,7 @@ down.grid(row=1, column=2)
 
 #reset, pause/resume button to control game state
 reset = tk.Button(game.controls, text="Reset", font=("Arial", 12),
-                  command = lambda : reset())
+                  command = lambda : game.restart())
 reset.grid(row=0, column=4)
 
 pauseBtn = tk.Button(game.controls, text="Pause", font=("Arial", 12),
@@ -263,14 +261,7 @@ pauseBtn.grid(row=1, column=4)
 resumeBtn.grid(row=1, column=4)
 resumeBtn.grid_remove()
 
-#TODO move these functions into Game, improve
-def reset():
-    game.suspend()
-    game.start()
-    for ent in entities:
-        ent.reset()
-    startGame()
-
+#these functions control displaying and hiding of the pause/resume buttons
 def pause():
     game.suspend()
     pauseBtn.grid_remove()
@@ -281,4 +272,4 @@ def resume():
     pauseBtn.grid()
     resumeBtn.grid_remove()
 
-startGame()
+startGameLoop()
