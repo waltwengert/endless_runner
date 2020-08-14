@@ -6,9 +6,9 @@ from random import randrange
 WWIDTH = 600
 WHEIGHT = 400
 GHEIGHT = WHEIGHT - (WHEIGHT/5) #game frame gets 4/5, rest for controls
-SPEEDINT = 500 #the score interval that will increase speed
+SPEEDINT = 250 #the loop number interval that will increase speed
 STARTLIVES = 3
-FPS = 30 #how many times per second the game loops
+FPS = 60 #how many times per second the game loops
 LANES = 4
 LHEIGHT = GHEIGHT / LANES #lanes are equal height portions of game frame
 
@@ -34,6 +34,7 @@ class Game:
         self.lives = lives
         self.loopNo = 0
         self.playing = True
+        self.quit = False
 
         #setup a window with given dimensions that cannot be resized
         self.window = tk.Tk()
@@ -41,6 +42,7 @@ class Game:
         self.window.geometry("%dx%d" % (WWIDTH, WHEIGHT))
         self.window.configure(background="grey")
         self.window.resizable(0, 0)
+        self.window.protocol("WM_DELETE_WINDOW", self.close)
 
         #game gets 4/5 of screen, 1/5 reserved for controls
         self.gameCanv = tk.Canvas(self.window, width=WWIDTH, height=GHEIGHT)
@@ -77,7 +79,7 @@ class Game:
         if self.playing:
             self.loopNo += 1
             self.addScore(1)
-        
+      
         self.window.update()
         self.scoreStr.set("Score: %s" % game.score)
         self.livesStr.set("Lives remaining: %s" % game.lives)
@@ -108,26 +110,30 @@ class Game:
         self.loopNo = 0
         self.playing = True
 
+    def close(self):
+        self.quit = True
+
 #Entity objects for any game entities (player, enemies, pickups)
 #addY(x) and addX(x) methods to modify the entity's dimensions
 #when initialised the Entity object creates its own rectangle on gameCanv
 class Entity:
-    def __init__(self, categ, game, width, height, X, Y, lane):
+    def __init__(self, category, game, width, height, X, Y, lane):
+        #entities need access to game instance to move rects on canvas
         self.game = game
         
-        rectColour = "black" #default
-        if categ == 0: #player 
+        rectColour = "black" #default if category set incorrectly
+        if category == 0: #player 
             rectColour = "green"
-        elif categ == 1: #pickup
+        elif category == 1: #pickup
             rectColour = "yellow"
-        elif categ == 2: #obstacle 
+        elif category == 2: #obstacle 
             rectColour = "red"
 
         #initialise the entity rect with given dimensions
         rect = game.addRect(X, Y, width, height, rectColour)
 
         self.rect = rect
-        self.categ = categ
+        self.category = category
         self.height = height
         self.width = width
         self.X = X
@@ -153,7 +159,7 @@ class Entity:
             newC = 2 #so that if newC == 3 it's still obstacle
             
         game.gameCanv.itemconfig(self.rect, fill=newFill)
-        self.categ = newC
+        self.category = newC
         
         rOffset = randrange(80) + 20 #min 20, max 100
         self.addX(WWIDTH + rOffset) #offset ensures reset is off screen
@@ -190,10 +196,10 @@ def startGame():
                     ent.reset()
 
                 if player.collidesWith(ent):
-                    if ent.categ == 1: #pickup, add score
+                    if ent.category == 1: #pickup, add score
                         game.flash("yellow")
                         game.addScore(PICKUPVAL)
-                    elif ent.categ == 2: #obstacle, take life
+                    elif ent.category == 2: #obstacle, take life
                         game.flash("red")
                         game.addLives(-1)
                     ent.reset()
@@ -202,6 +208,10 @@ def startGame():
                 game.livesStr.set("Game Over")
                 game.end()
                 break
+
+        if game.quit: #if the game has been quit through closing window
+            game.window.destroy()
+            break
 
         #general loop events
         game.loop()            
@@ -268,3 +278,4 @@ def resume():
     resumeBtn.grid_remove()
 
 startGame()
+game.window.mainloop()
