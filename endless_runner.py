@@ -22,7 +22,7 @@ NUMENTS = 4 #number of non-player entities in the game
 
 #Game object that manages general game properties including main window
 #When initialised set properties, create window with game and control frames
-#and create UI elements for these
+#and create variable UI elements (labels)
 ##addScore(x), addSpeed(x), addLives(x) methods modify the game properties
 ##createRect(...), moveRect(...) are support methods for managing Entitys' rect
 ##suspend(), resume() control whether the game loop is running or not
@@ -77,9 +77,8 @@ class Game:
     def addLives(self, incr):
         self.lives += incr
 
-    def createRect(self, X, Y, width, height, fill):
-        rect = self.gameCanv.create_rectangle(X, Y, X+width, Y+height,
-                                              fill=fill)
+    def createRect(self, X, Y, width, height):
+        rect = self.gameCanv.create_rectangle(X, Y, X+width, Y+height)
         return rect
 
     def moveRect(self, rect, incrX, incrY):
@@ -149,11 +148,11 @@ class Entity:
 
     def setColour(self):
         #get the colour as a string based on Entity category
-        if category == 0: #player 
+        if self.category == 0: #player 
             rectColour = "green"
-        elif category == 1: #pickup
+        elif self.category == 1: #pickup
             rectColour = "yellow"
-        elif category == 2: #obstacle 
+        elif self.category == 2: #obstacle 
             rectColour = "red"
         game.gameCanv.itemconfig(self.rect, fill=rectColour)
 
@@ -167,14 +166,14 @@ class Entity:
         self.setColour()
         
         rOffset = randrange(80) + 20 #random x offset min 20, max 100
-        self.addX(WWIDTH + rOffset) #offset ensures reset is off-screen
+        self.addX(WWIDTH+rOffset) #offset ensures reset is off-screen
 
         rLane = randrange(LANES) #random lane out of set lanes
-        self.addY((rLane - self.lane) * LHEIGHT) #add rLane lots of LHEIGHT
+        self.addY((rLane-self.lane) * LHEIGHT) #add rLane lots of LHEIGHT
         self.lane = rLane
 
     def collidesWith(self, entity):
-        if (self.X < entity.X + entity.width and self.X + self.width > entity.X
+        if (self.X < entity.X+entity.width and self.X+self.width > entity.X
             and self.lane == entity.lane): #if same lane and X intersects
             return True
         return False
@@ -222,27 +221,28 @@ def startGame():
         #general loop events
         game.loop()            
         time.sleep(1/FPS)
+    
     print("game loop terminated")
 
 #initialise Game object
 game = Game(STARTLIVES)
 
 #initialise Entity objects
-pY = (40 + ((LANES - 1 - 1) * 80)) - (CSIDE / 2)
-player = Entity(game, 0, CSIDE, CSIDE, CSIDE, pY, 1)
+#40 to be centre lane, x*80 based on lane, -height/2 to centre rect
+playerY = (40 + ((LANES-1-1) * 80)) - (CSIDE/2)
+player = Entity(game, 0, CSIDE, CSIDE, CSIDE, playerY, 1)
 
+#create a set number (NUMENTS) of non-player entities
 entities = []
-
 for i in range(NUMENTS):
-    c = randrange(2) + 1 #category; if 1 then pickup if 2 then obstacle
-    l = randrange(LANES) #lane number
-    x = 250 + (i * 150)
-    y = (40 + ((LANES - 1 - l) * 80)) - (OSIDE / 2)
-    
+    c = randrange(2) + 1 #random category; if 1 then pickup if 2 then obstacle
+    l = randrange(LANES) #random lane number
+    x = 250 + (i*150) #spread out in x intervals of 150 starting at 250
+    y = (40 + ((LANES-1-l) * 80)) - (OSIDE/2) #same as player rationale
     ent = Entity(game, c, OSIDE, OSIDE, x, y, l)
     entities.append(ent)
 
-#buttons to move player up/down a row
+#up/down buttons with unicode arrows to move player up/down a row
 up = tk.Button(game.controls, text=" \u2191 ", font=("Arial", 14),
                command = lambda : player.changeLane(1))
 down = tk.Button(game.controls, text=" \u2193 ", font=("Arial", 14),
@@ -250,21 +250,11 @@ down = tk.Button(game.controls, text=" \u2193 ", font=("Arial", 14),
 up.grid(row=0, column=2)
 down.grid(row=1, column=2)
 
-#reset and quit buttons
+#reset, pause/resume button to control game state
 reset = tk.Button(game.controls, text="Reset", font=("Arial", 12),
                   command = lambda : reset())
 reset.grid(row=0, column=4)
 
-def reset():
-    game.suspend()
-    game.start()
-
-    for ent in entities:
-        ent.reset()
-    
-    startGame()
-
-#pause/resume button
 pauseBtn = tk.Button(game.controls, text="Pause", font=("Arial", 12),
                   command = lambda : pause())
 resumeBtn = tk.Button(game.controls, text="Resume", font=("Arial", 12),
@@ -272,6 +262,14 @@ resumeBtn = tk.Button(game.controls, text="Resume", font=("Arial", 12),
 pauseBtn.grid(row=1, column=4)
 resumeBtn.grid(row=1, column=4)
 resumeBtn.grid_remove()
+
+#TODO move these functions into Game, improve
+def reset():
+    game.suspend()
+    game.start()
+    for ent in entities:
+        ent.reset()
+    startGame()
 
 def pause():
     game.suspend()
@@ -284,4 +282,3 @@ def resume():
     resumeBtn.grid_remove()
 
 startGame()
-game.window.mainloop()
